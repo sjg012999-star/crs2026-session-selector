@@ -251,6 +251,76 @@
       font-size: 10px;
       line-height: 1;
     }
+    .team-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-width: 0;
+      margin-top: 2px;
+    }
+    .team-chip {
+      --team-color: #64748b;
+      min-height: 22px;
+      max-width: 100%;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid color-mix(in srgb, var(--team-color) 62%, #64748b);
+      border-left-width: 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--team-color) 16%, #ffffff);
+      color: #17202a;
+      padding: 3px 8px 3px 6px;
+      font-size: 11px;
+      font-weight: 760;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .team-chip.own {
+      box-shadow: 0 0 0 2px rgba(15, 23, 42, .14);
+    }
+    .team-chip.select {
+      background: color-mix(in srgb, var(--team-color) 22%, #ffffff);
+    }
+    .team-chip.maybe {
+      opacity: .92;
+    }
+    .team-chip.skip {
+      opacity: .82;
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+    }
+    .team-chip .team-chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .team-chip .team-chip-decision {
+      color: var(--muted);
+      font-weight: 680;
+    }
+    .timeline-card-meta .team-chip-row {
+      flex: 1 1 100%;
+      width: 100%;
+      gap: 3px;
+      margin-top: 1px;
+      overflow: hidden;
+      flex-wrap: nowrap;
+    }
+    .timeline-card-meta .team-chip {
+      min-height: 17px;
+      max-width: 86px;
+      padding: 2px 5px 2px 4px;
+      border-left-width: 4px;
+      font-size: 9.5px;
+    }
+    .timeline-card.tiny .team-chip-row {
+      display: none;
+    }
+    .card .team-chip-row {
+      margin-top: 0;
+    }
     .count-pill {
       border-radius: 999px;
       padding: 3px 7px;
@@ -393,7 +463,7 @@
     .timeline-card.conflict { outline: 2px solid rgba(180, 35, 24, .36); }
     .timeline-card-meta {
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       gap: 4px;
       min-width: 0;
       align-items: center;
@@ -1075,15 +1145,26 @@
       saveTeamCache();
     }
 
-    function teamDotsHTML(session, limit = 5) {
+    function teamChoiceLabel(row, compact = false) {
+      const name = cleanParticipantName(row.participant_name);
+      const decision = DECISION_META[row.decision]?.label || row.decision;
+      if (compact) return `${name} · ${decision}`;
+      return `${name} · ${decision}`;
+    }
+
+    function teamDotsHTML(session, limit = 5, compact = false) {
       const rows = teamRowsForSession(session.id);
       if (!rows.length) return '';
       const visible = rows.slice(0, limit);
       const more = rows.length - visible.length;
-      return `<span class="team-dot-row" aria-label="Team selections">${visible.map(row => `
-        <span class="team-dot ${row.decision} ${row.participant_key === state.profile.key ? 'own' : ''}"
-          style="background: ${escapeHTML(row.participant_color)}"
-          title="${escapeHTML(row.participant_name)} · ${escapeHTML(DECISION_META[row.decision].label)}">${escapeHTML(participantInitial(row.participant_name))}</span>
+      const label = rows.map(row => teamChoiceLabel(row)).join(', ');
+      return `<span class="team-chip-row ${compact ? 'compact' : ''}" aria-label="팀 선택: ${escapeHTML(label)}">${visible.map(row => `
+        <span class="team-chip ${row.decision} ${row.participant_key === state.profile.key ? 'own' : ''}"
+          style="--team-color: ${escapeHTML(row.participant_color)}"
+          title="${escapeHTML(teamChoiceLabel(row))}">
+          <span class="team-chip-name">${escapeHTML(cleanParticipantName(row.participant_name))}</span>
+          <span class="team-chip-decision">· ${escapeHTML(DECISION_META[row.decision].label)}</span>
+        </span>
       `).join('')}${more > 0 ? `<span class="team-more">+${more}</span>` : ''}</span>`;
     }
 
@@ -1307,7 +1388,7 @@
             <span class="badge time-badge">${escapeHTML(session.time.replace(' WEST', ''))}</span>
             <span class="badge ${session.recommendation}">S${session.score}</span>
             <span class="badge">${escapeHTML(decisionText)}</span>
-            ${teamDotsHTML(session, 4)}
+            ${teamDotsHTML(session, 3, true)}
             ${conflict ? '<span class="badge conflict">시간 충돌</span>' : ''}
             ${session.needsTimeCheck ? '<span class="badge conflict">시간 확인</span>' : ''}
           </div>

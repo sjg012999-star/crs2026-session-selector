@@ -890,8 +890,8 @@
     };
     const FILTERS = [
       ['all', '전체'],
-      ['priority', 'Score 4-5'],
-      ['direct', 'Score 5'],
+      ['priority', '점수 4-5'],
+      ['direct', '점수 5'],
       ['selected', '선택'],
       ['candidate', '선택+후보'],
       ['hide-low', '낮은 관련도 숨김'],
@@ -1458,7 +1458,7 @@
                 <div class="route-time">${escapeHTML(session.time)}</div>
                 <div>
                   <div class="route-title">${escapeHTML(session.title)}</div>
-                  <div class="route-meta">Score ${session.score} · ${escapeHTML(session.track || '')}</div>
+                  <div class="route-meta">점수 ${session.score} · ${escapeHTML(session.track || '')}</div>
                 </div>
                 <div class="meta-line">
                   ${teamDotsHTML(session)}
@@ -1646,10 +1646,10 @@
         lines.push(`## ${date.label}`, '');
         rows.forEach(session => {
           lines.push(`- **${session.time}** · ${session.title}`);
-          lines.push(`  - Score: ${session.score} / ${session.recommendationLabel}`);
-          if (session.track) lines.push(`  - Track: ${session.track}`);
-          if (session.rationale) lines.push(`  - Why: ${session.rationale}`);
-          if (session.sourceUrl) lines.push(`  - Source: ${session.sourceUrl}`);
+          lines.push(`  - 점수: ${session.score} / ${session.recommendationLabel}`);
+          if (session.track) lines.push(`  - 트랙: ${session.track}`);
+          if (session.rationale) lines.push(`  - 추천 사유: ${session.rationale}`);
+          if (session.sourceUrl) lines.push(`  - 원문: ${session.sourceUrl}`);
         });
         lines.push('');
       });
@@ -1707,7 +1707,7 @@
         state.team.ready = true;
         state.team.lastSync = new Date();
         saveTeamCache();
-        setTeamStatus(`최근 동기화 ${state.team.lastSync.toLocaleTimeString()} · ${state.team.rows.length} team picks`);
+        setTeamStatus(`최근 동기화 ${state.team.lastSync.toLocaleTimeString()} · 팀 선택 ${state.team.rows.length}개`);
         render();
       } catch (error) {
         state.team.ready = false;

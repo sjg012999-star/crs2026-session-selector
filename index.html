@@ -160,7 +160,7 @@
     }
     .team-input-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 42px;
+      grid-template-columns: minmax(0, 1fr);
       gap: 8px;
       align-items: center;
     }
@@ -171,13 +171,40 @@
       padding: 0 9px;
       width: 100%;
     }
-    .team-field input[type="color"] {
-      width: 42px;
-      height: 34px;
+    .team-field input[type="hidden"] {
+      display: none;
+    }
+    .participant-switcher {
+      min-height: 34px;
       border: 1px solid var(--line-strong);
       border-radius: var(--radius);
-      padding: 3px;
+      padding: 0 9px;
       background: var(--surface);
+      width: 100%;
+    }
+    .color-palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+    }
+    .color-choice {
+      --profile-color: #1d4ed8;
+      width: 28px;
+      height: 28px;
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: var(--profile-color);
+      padding: 0;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .72), 0 1px 3px rgba(15, 23, 42, .14);
+    }
+    .color-choice.active {
+      border-color: #0f172a;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .82), 0 0 0 2px rgba(15, 23, 42, .12);
+    }
+    .color-choice:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
     }
     .team-sync-line {
       display: flex;
@@ -407,6 +434,22 @@
       gap: 12px;
       padding-top: 10px;
       overflow-x: auto;
+    }
+    .timeline-top-scroll {
+      height: 15px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+    }
+    .timeline-top-scroll::-webkit-scrollbar,
+    .timeline::-webkit-scrollbar {
+      height: 12px;
+    }
+    .timeline-scroll-spacer {
+      height: 1px;
     }
     .timeline-scale,
     .timeline-canvas {
@@ -819,6 +862,9 @@
         display: block;
         overflow-x: visible;
       }
+      .timeline-top-scroll {
+        display: none;
+      }
       .day-heading {
         flex-direction: column;
         align-items: flex-start;
@@ -885,8 +931,16 @@
             <span>사용자</span>
             <div class="team-input-row">
               <input type="text" id="participantName" autocomplete="off" placeholder="사용자 이름">
-              <input type="color" id="participantColor" aria-label="사용자 색상">
+              <input type="hidden" id="participantColor">
             </div>
+          </label>
+          <label class="team-field">
+            <span>기존 사용자로 전환</span>
+            <select class="participant-switcher" id="participantSwitcher" aria-label="기존 사용자로 전환"></select>
+          </label>
+          <label class="team-field">
+            <span>색상</span>
+            <div class="color-palette" id="participantColorPalette" aria-label="사용자 색상"></div>
           </label>
           <div class="team-sync-line">
             <div class="team-mode-label" id="teamModeLabel">로컬 저장</div>
@@ -958,6 +1012,13 @@
       hold: { label: '보류', activeLabel: '보류됨', icon: '○', className: 'hold' },
       skip: { label: '제외', activeLabel: '제외됨', icon: '×', className: 'skip' }
     };
+    const PROFILE_COLORS = [
+      ['#1d4ed8', '파랑'],
+      ['#16a34a', '초록'],
+      ['#d97706', '주황'],
+      ['#dc2626', '빨강'],
+      ['#7c3aed', '보라']
+    ];
     const FILTERS = [
       ['all', '전체'],
       ['priority', '점수 4-5'],
@@ -1003,10 +1064,10 @@
         return {
           key: saved.key || randomParticipantKey(),
           name: cleanParticipantName(saved.name || '사용자1'),
-          color: normalizeColor(saved.color || '#2563eb')
+          color: normalizeProfileColor(saved.color || '#1d4ed8')
         };
       } catch (error) {
-        return { key: randomParticipantKey(), name: '사용자1', color: '#2563eb' };
+        return { key: randomParticipantKey(), name: '사용자1', color: '#1d4ed8' };
       }
     }
 
@@ -1055,6 +1116,13 @@
     function normalizeColor(value) {
       const color = String(value || '').trim();
       return /^#[0-9a-f]{6}$/i.test(color) ? color : '#2563eb';
+    }
+
+    function normalizeProfileColor(value) {
+      const color = normalizeColor(value).toLowerCase();
+      return PROFILE_COLORS.some(([candidate]) => candidate.toLowerCase() === color)
+        ? color
+        : PROFILE_COLORS[0][0];
     }
 
     function isTeamConfigured() {
@@ -1199,6 +1267,40 @@
         if (b.key === state.profile.key) return 1;
         return a.name.localeCompare(b.name);
       });
+    }
+
+    function decisionsForParticipant(participantKey) {
+      const decisions = {};
+      state.team.rows
+        .map(normalizeTeamRow)
+        .filter(row => row.participant_key === participantKey && row.decision !== 'hold')
+        .forEach(row => {
+          decisions[row.session_id] = row.decision;
+        });
+      return decisions;
+    }
+
+    function syncProfileInputs() {
+      const nameInput = document.getElementById('participantName');
+      const colorInput = document.getElementById('participantColor');
+      if (nameInput && document.activeElement !== nameInput) nameInput.value = state.profile.name;
+      if (colorInput) colorInput.value = state.profile.color;
+    }
+
+    function switchParticipant(participantKey) {
+      const person = participantSummary().find(item => item.key === participantKey);
+      if (!person || person.key === state.profile.key) return;
+      state.profile = {
+        key: person.key,
+        name: cleanParticipantName(person.name),
+        color: normalizeProfileColor(person.color)
+      };
+      state.decisions = decisionsForParticipant(person.key);
+      saveProfile();
+      saveDecisions();
+      syncProfileInputs();
+      render();
+      showToast(`${state.profile.name} 사용자로 전환했습니다.`);
     }
 
     function escapeHTML(value) {
@@ -1400,6 +1502,25 @@
       `;
     }
 
+    function bindTimelineScrollers() {
+      document.querySelectorAll('.timeline-scroll-group').forEach(group => {
+        const top = group.querySelector('.timeline-top-scroll');
+        const bottom = group.querySelector('.timeline-scroll');
+        if (!top || !bottom) return;
+        let syncing = false;
+        const sync = (source, target) => {
+          if (syncing) return;
+          syncing = true;
+          target.scrollLeft = source.scrollLeft;
+          window.requestAnimationFrame(() => {
+            syncing = false;
+          });
+        };
+        top.onscroll = () => sync(top, bottom);
+        bottom.onscroll = () => sync(bottom, top);
+      });
+    }
+
     function renderMetrics() {
       const total = SESSIONS.length;
       const selected = SESSIONS.filter(s => decisionOf(s) === 'select').length;
@@ -1422,6 +1543,8 @@
       const mode = document.getElementById('teamModeLabel');
       const status = document.getElementById('teamSyncStatus');
       const legend = document.getElementById('teamLegend');
+      const switcher = document.getElementById('participantSwitcher');
+      const palette = document.getElementById('participantColorPalette');
       if (!mode || !status || !legend) return;
       mode.textContent = isTeamConfigured()
         ? (state.team.ready ? 'Supabase 팀 동기화' : 'Supabase 설정됨')
@@ -1431,6 +1554,22 @@
         : 'Supabase 설정 전이라 이 브라우저에만 저장됩니다.');
 
       const people = participantSummary();
+      if (switcher) {
+        switcher.innerHTML = people.map(person => {
+          const suffix = person.key === state.profile.key ? ' · 현재' : '';
+          const counts = `선택 ${person.select || 0} · 후보 ${person.maybe || 0} · 제외 ${person.skip || 0}`;
+          return `<option value="${escapeHTML(person.key)}">${escapeHTML(person.name)}${suffix} · ${escapeHTML(counts)}</option>`;
+        }).join('');
+        switcher.value = state.profile.key;
+        switcher.disabled = people.length < 2;
+      }
+      if (palette) {
+        palette.innerHTML = PROFILE_COLORS.map(([color, label]) => {
+          const active = state.profile.color.toLowerCase() === color.toLowerCase();
+          return `<button type="button" class="color-choice ${active ? 'active' : ''}" style="--profile-color: ${escapeHTML(color)}" data-profile-color="${escapeHTML(color)}" aria-label="${escapeHTML(label)}" aria-pressed="${active ? 'true' : 'false'}" title="${escapeHTML(label)}"></button>`;
+        }).join('');
+      }
+      syncProfileInputs();
       legend.innerHTML = people.map(person => `
         <div class="team-person">
           <span class="team-dot ${person.key === state.profile.key ? 'own' : ''}" style="background: ${escapeHTML(person.color)}">${escapeHTML(participantInitial(person.name))}</span>
@@ -1470,18 +1609,21 @@
       const byDate = groupedByDate(sessions);
       const html = DATES
         .filter(date => state.date === 'all' || state.date === date.key)
-        .map(date => {
+        .map((date, index) => {
           const rows = byDate.get(date.key);
           if (!rows.length) return `<section class="day-section"><div class="day-heading"><h2>${escapeHTML(date.label)}</h2><span>일치하는 세션 없음</span></div><div class="empty">현재 필터에 맞는 세션이 없습니다.</div></section>`;
           const layout = layoutTimedEvents(rows);
           return `
-            <section class="day-section" id="day-${date.key}">
+            <section class="day-section timeline-scroll-group" id="day-${date.key}">
               <div class="day-heading">
                 <h2>${escapeHTML(date.label)}</h2>
           <span>${rows.length}개 표시 / 전체 ${SESSIONS.filter(s => s.dateKey === date.key).length}개 · 진행시간 기준 겹침 반영</span>
               </div>
               <div class="timeline-legend">카드 높이는 실제 진행시간을 반영합니다. 좌우로 나란히 놓인 카드는 시간이 겹치므로, 이동 계획이 없다면 같은 시간대에서는 하나만 고르는 것이 안전합니다.</div>
-              <div class="timeline">
+              <div class="timeline-top-scroll" ${index === 0 ? 'id="timelineTopScroll"' : ''} aria-label="${escapeHTML(date.label)} 상단 가로 스크롤">
+                <div class="timeline-scroll-spacer" style="width: ${layout.canvasMinWidth + 110}px"></div>
+              </div>
+              <div class="timeline timeline-scroll">
                 <div class="timeline-scale" style="height: ${layout.height}px">
                   ${layout.hours.map(hour => `<div class="hour-label" style="top: ${hour.top}px">${minutesLabel(hour.min)}</div>`).join('')}
                 </div>
@@ -1497,6 +1639,7 @@
           `;
         }).join('');
       document.getElementById('timelineView').innerHTML = html || '<div class="empty">현재 필터에 맞는 세션이 없습니다.</div>';
+      bindTimelineScrollers();
     }
 
     function renderBoard() {
@@ -1926,6 +2069,8 @@
       saveProfile();
       const nameInput = document.getElementById('participantName');
       const colorInput = document.getElementById('participantColor');
+      const switcher = document.getElementById('participantSwitcher');
+      const palette = document.getElementById('participantColorPalette');
       const syncButton = document.getElementById('syncNow');
       nameInput.value = state.profile.name;
       colorInput.value = state.profile.color;
@@ -1937,7 +2082,22 @@
         scheduleProfileSync();
       });
       colorInput.addEventListener('input', event => {
-        state.profile.color = normalizeColor(event.target.value);
+        state.profile.color = normalizeProfileColor(event.target.value);
+        saveProfile();
+        updateOwnTeamProfile();
+        render();
+        scheduleProfileSync();
+      });
+      switcher.addEventListener('change', event => {
+        switchParticipant(event.target.value);
+      });
+      palette.addEventListener('click', event => {
+        const button = event.target.closest('[data-profile-color]');
+        if (!button) return;
+        const nextColor = normalizeProfileColor(button.dataset.profileColor);
+        if (state.profile.color === nextColor) return;
+        state.profile.color = nextColor;
+        colorInput.value = nextColor;
         saveProfile();
         updateOwnTeamProfile();
         render();

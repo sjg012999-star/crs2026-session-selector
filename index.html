@@ -99,8 +99,14 @@
     .sidebar {
       position: sticky;
       top: calc(var(--header-h) + 16px);
+      max-height: calc(100vh - var(--header-h) - 32px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      padding-right: 4px;
       display: grid;
       gap: 12px;
+      align-content: start;
     }
     .panel {
       background: var(--surface);
@@ -435,11 +441,32 @@
       padding-top: 10px;
       overflow-x: auto;
     }
+    .timeline-scroll-toolbar {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 34px;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .timeline-scroll-btn {
+      width: 34px;
+      min-height: 28px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1;
+      font-weight: 800;
+    }
+    .timeline-scroll-btn:hover {
+      background: #fbfcfd;
+      border-color: #8793a2;
+    }
     .timeline-top-scroll {
       height: 15px;
       overflow-x: auto;
       overflow-y: hidden;
-      margin-top: 8px;
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: var(--surface-soft);
@@ -848,7 +875,12 @@
       .header-inner { grid-template-columns: 1fr; }
       .header-actions { justify-content: flex-start; }
       .layout { grid-template-columns: 1fr; }
-      .sidebar { position: static; }
+      .sidebar {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+        padding-right: 0;
+      }
       .toolbar { grid-template-columns: 1fr; }
       .segmented { width: 100%; }
       .segmented button { flex: 1; }
@@ -862,7 +894,7 @@
         display: block;
         overflow-x: visible;
       }
-      .timeline-top-scroll {
+      .timeline-scroll-toolbar {
         display: none;
       }
       .day-heading {
@@ -1518,6 +1550,13 @@
         };
         top.onscroll = () => sync(top, bottom);
         bottom.onscroll = () => sync(bottom, top);
+        group.querySelectorAll('[data-scroll-dir]').forEach(button => {
+          button.onclick = () => {
+            const direction = Number(button.dataset.scrollDir || 0);
+            const step = Math.max(280, Math.round(bottom.clientWidth * 0.65));
+            bottom.scrollBy({ left: direction * step, behavior: 'smooth' });
+          };
+        });
       });
     }
 
@@ -1620,8 +1659,12 @@
           <span>${rows.length}개 표시 / 전체 ${SESSIONS.filter(s => s.dateKey === date.key).length}개 · 진행시간 기준 겹침 반영</span>
               </div>
               <div class="timeline-legend">카드 높이는 실제 진행시간을 반영합니다. 좌우로 나란히 놓인 카드는 시간이 겹치므로, 이동 계획이 없다면 같은 시간대에서는 하나만 고르는 것이 안전합니다.</div>
-              <div class="timeline-top-scroll" ${index === 0 ? 'id="timelineTopScroll"' : ''} aria-label="${escapeHTML(date.label)} 상단 가로 스크롤">
-                <div class="timeline-scroll-spacer" style="width: ${layout.canvasMinWidth + 110}px"></div>
+              <div class="timeline-scroll-toolbar" aria-label="${escapeHTML(date.label)} 좌우 스크롤 컨트롤">
+                <button type="button" class="timeline-scroll-btn" data-scroll-dir="-1" aria-label="${escapeHTML(date.label)} 왼쪽으로 이동">←</button>
+                <div class="timeline-top-scroll" ${index === 0 ? 'id="timelineTopScroll"' : ''} aria-label="${escapeHTML(date.label)} 상단 가로 스크롤">
+                  <div class="timeline-scroll-spacer" style="width: ${layout.canvasMinWidth + 110}px"></div>
+                </div>
+                <button type="button" class="timeline-scroll-btn" data-scroll-dir="1" aria-label="${escapeHTML(date.label)} 오른쪽으로 이동">→</button>
               </div>
               <div class="timeline timeline-scroll">
                 <div class="timeline-scale" style="height: ${layout.height}px">

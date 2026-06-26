@@ -440,6 +440,11 @@
       gap: 12px;
       padding-top: 10px;
       overflow-x: auto;
+      cursor: grab;
+    }
+    .timeline.dragging {
+      cursor: grabbing;
+      user-select: none;
     }
     .timeline-scroll-toolbar {
       display: grid;
@@ -447,6 +452,17 @@
       gap: 8px;
       align-items: center;
       margin-top: 8px;
+      background: var(--bg);
+    }
+    .timeline-scroll-toolbar.top {
+      position: sticky;
+      top: calc(var(--header-h) + 43px);
+      z-index: 9;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .timeline-scroll-toolbar.bottom {
+      margin: 8px 0 4px;
     }
     .timeline-scroll-btn {
       width: 34px;
@@ -463,7 +479,7 @@
       background: #fbfcfd;
       border-color: #8793a2;
     }
-    .timeline-top-scroll {
+    .timeline-linked-scroll {
       height: 15px;
       overflow-x: auto;
       overflow-y: hidden;
@@ -471,7 +487,7 @@
       border-radius: var(--radius);
       background: var(--surface-soft);
     }
-    .timeline-top-scroll::-webkit-scrollbar,
+    .timeline-linked-scroll::-webkit-scrollbar,
     .timeline::-webkit-scrollbar {
       height: 12px;
     }
@@ -1536,27 +1552,62 @@
 
     function bindTimelineScrollers() {
       document.querySelectorAll('.timeline-scroll-group').forEach(group => {
-        const top = group.querySelector('.timeline-top-scroll');
         const bottom = group.querySelector('.timeline-scroll');
-        if (!top || !bottom) return;
+        const linkedScrollers = [...group.querySelectorAll('.timeline-linked-scroll')];
+        if (!bottom || !linkedScrollers.length) return;
         let syncing = false;
-        const sync = (source, target) => {
+        const sync = source => {
           if (syncing) return;
           syncing = true;
-          target.scrollLeft = source.scrollLeft;
-          window.requestAnimationFrame(() => {
-            syncing = false;
+          const nextLeft = source.scrollLeft;
+          if (source !== bottom) bottom.scrollLeft = nextLeft;
+          linkedScrollers.forEach(scroller => {
+            if (scroller !== source) scroller.scrollLeft = nextLeft;
           });
+          syncing = false;
         };
-        top.onscroll = () => sync(top, bottom);
-        bottom.onscroll = () => sync(bottom, top);
+        linkedScrollers.forEach(scroller => {
+          scroller.onscroll = () => sync(scroller);
+        });
+        bottom.onscroll = () => sync(bottom);
         group.querySelectorAll('[data-scroll-dir]').forEach(button => {
           button.onclick = () => {
             const direction = Number(button.dataset.scrollDir || 0);
             const step = Math.max(280, Math.round(bottom.clientWidth * 0.65));
-            bottom.scrollBy({ left: direction * step, behavior: 'smooth' });
+            const maxLeft = bottom.scrollWidth - bottom.clientWidth;
+            bottom.scrollLeft = Math.max(0, Math.min(maxLeft, bottom.scrollLeft + direction * step));
+            sync(bottom);
           };
         });
+        let dragState = null;
+        bottom.onpointerdown = event => {
+          if (event.button !== 0) return;
+          if (event.target.closest('.timeline-card, button, a, input, select, textarea')) return;
+          dragState = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startLeft: bottom.scrollLeft
+          };
+          bottom.classList.add('dragging');
+          try {
+            bottom.setPointerCapture(event.pointerId);
+          } catch (error) {
+            // Some synthetic tests do not create an active pointer capture target.
+          }
+          event.preventDefault();
+        };
+        bottom.onpointermove = event => {
+          if (!dragState || event.pointerId !== dragState.pointerId) return;
+          bottom.scrollLeft = dragState.startLeft - (event.clientX - dragState.startX);
+          event.preventDefault();
+        };
+        const endDrag = event => {
+          if (!dragState || event.pointerId !== dragState.pointerId) return;
+          dragState = null;
+          bottom.classList.remove('dragging');
+        };
+        bottom.onpointerup = endDrag;
+        bottom.onpointercancel = endDrag;
       });
     }
 
@@ -1659,9 +1710,9 @@
           <span>${rows.length}개 표시 / 전체 ${SESSIONS.filter(s => s.dateKey === date.key).length}개 · 진행시간 기준 겹침 반영</span>
               </div>
               <div class="timeline-legend">카드 높이는 실제 진행시간을 반영합니다. 좌우로 나란히 놓인 카드는 시간이 겹치므로, 이동 계획이 없다면 같은 시간대에서는 하나만 고르는 것이 안전합니다.</div>
-              <div class="timeline-scroll-toolbar" aria-label="${escapeHTML(date.label)} 좌우 스크롤 컨트롤">
+              <div class="timeline-scroll-toolbar top" aria-label="${escapeHTML(date.label)} 좌우 스크롤 컨트롤">
                 <button type="button" class="timeline-scroll-btn" data-scroll-dir="-1" aria-label="${escapeHTML(date.label)} 왼쪽으로 이동">←</button>
-                <div class="timeline-top-scroll" ${index === 0 ? 'id="timelineTopScroll"' : ''} aria-label="${escapeHTML(date.label)} 상단 가로 스크롤">
+                <div class="timeline-linked-scroll timeline-top-scroll" ${index === 0 ? 'id="timelineTopScroll"' : ''} aria-label="${escapeHTML(date.label)} 상단 가로 스크롤">
                   <div class="timeline-scroll-spacer" style="width: ${layout.canvasMinWidth + 110}px"></div>
                 </div>
                 <button type="button" class="timeline-scroll-btn" data-scroll-dir="1" aria-label="${escapeHTML(date.label)} 오른쪽으로 이동">→</button>
@@ -1674,9 +1725,16 @@
                   ${layout.items.map(item => `
                     <div class="timeline-event" style="top: ${item.top}px; left: calc(${(item.column * 100) / item.columns}%); width: calc(${100 / item.columns}%); height: ${item.height}px" title="${escapeHTML(item.session.time)} · ${escapeHTML(item.session.title)}">
                       ${timelineCardHTML(item.session, item.height)}
-                    </div>
+                  </div>
                 `).join('')}
                 </div>
+              </div>
+              <div class="timeline-scroll-toolbar bottom" aria-label="${escapeHTML(date.label)} 하단 좌우 스크롤 컨트롤">
+                <button type="button" class="timeline-scroll-btn" data-scroll-dir="-1" aria-label="${escapeHTML(date.label)} 왼쪽으로 이동">←</button>
+                <div class="timeline-linked-scroll timeline-bottom-scroll" aria-label="${escapeHTML(date.label)} 하단 가로 스크롤">
+                  <div class="timeline-scroll-spacer" style="width: ${layout.canvasMinWidth + 110}px"></div>
+                </div>
+                <button type="button" class="timeline-scroll-btn" data-scroll-dir="1" aria-label="${escapeHTML(date.label)} 오른쪽으로 이동">→</button>
               </div>
             </section>
           `;

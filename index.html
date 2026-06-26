@@ -1611,6 +1611,31 @@
       });
     }
 
+    function captureTimelineScrollPositions() {
+      const positions = {};
+      document.querySelectorAll('.timeline-scroll-group').forEach(group => {
+        const timeline = group.querySelector('.timeline-scroll');
+        if (!timeline) return;
+        positions[group.id] = timeline.scrollLeft;
+      });
+      return positions;
+    }
+
+    function restoreTimelineScrollPositions(positions) {
+      document.querySelectorAll('.timeline-scroll-group').forEach(group => {
+        const savedLeft = positions[group.id];
+        if (typeof savedLeft !== 'number') return;
+        const timeline = group.querySelector('.timeline-scroll');
+        if (!timeline) return;
+        const maxLeft = Math.max(0, timeline.scrollWidth - timeline.clientWidth);
+        const nextLeft = Math.max(0, Math.min(maxLeft, savedLeft));
+        timeline.scrollLeft = nextLeft;
+        group.querySelectorAll('.timeline-linked-scroll').forEach(scroller => {
+          scroller.scrollLeft = nextLeft;
+        });
+      });
+    }
+
     function renderMetrics() {
       const total = SESSIONS.length;
       const selected = SESSIONS.filter(s => decisionOf(s) === 'select').length;
@@ -1695,6 +1720,7 @@
     }
 
     function renderTimeline() {
+      const scrollPositions = captureTimelineScrollPositions();
       const sessions = visibleSessions();
       const byDate = groupedByDate(sessions);
       const html = DATES
@@ -1741,6 +1767,7 @@
         }).join('');
       document.getElementById('timelineView').innerHTML = html || '<div class="empty">현재 필터에 맞는 세션이 없습니다.</div>';
       bindTimelineScrollers();
+      restoreTimelineScrollPositions(scrollPositions);
     }
 
     function renderBoard() {
